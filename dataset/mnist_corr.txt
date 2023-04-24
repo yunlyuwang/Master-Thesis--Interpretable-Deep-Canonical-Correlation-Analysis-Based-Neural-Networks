@@ -1,0 +1,106 @@
+@classmethod
+    def generate(cls, batch_size, num_boxes, classes=[0,1,2,3,4,5,6,7,8,9], max_width=10):
+        num_batches = int(np.floor(50000 / batch_size))
+        num_classes = len(classes)
+
+        augment_ds = tfds.as_numpy(tfds.load('mnist_corrupted/spatter'))
+
+        # View 1
+        print("View 1:")
+        print(" - Pre-process")
+        view1_train, view1_eval, view1_test = preprocess_dataset(augment_ds)
+        print(" - Filter classes")
+        view1_train = filter_classes(view1_train, classes=classes)
+        view1_eval = filter_classes(view1_eval, classes=classes)
+        view1_test = filter_classes(view1_test, classes=classes)
+        print(" - Add boxes")
+        view1_train = augment_batch(view1_train, num_boxes=num_boxes, max_width=max_width)
+        view1_eval = augment_batch(view1_eval, num_boxes=num_boxes, max_width=max_width)
+        view1_test = augment_batch(view1_test, num_boxes=num_boxes, max_width=max_width)
+
+        # View 2
+        print("\nView 2:")
+        print(" - Pre-process")
+        view2_train, view2_eval, view2_test = preprocess_dataset(augment_ds)
+        print(" - Filter classes")
+        view2_train = filter_classes(view2_train, classes=classes)
+        view2_eval = filter_classes(view2_eval, classes=classes)
+        view2_test = filter_classes(view2_test, classes=classes)
+        print(" - Add boxes")
+        view2_train = augment_batch(view2_train, num_boxes=num_boxes, max_width=max_width)
+        view2_eval = augment_batch(view2_eval, num_boxes=num_boxes, max_width=max_width)
+        view2_test = augment_batch(view2_test, num_boxes=num_boxes, max_width=max_width)
+        print(" - Shuffle")
+        view2_train = shuffle_instances(view2_train)
+        view2_eval = shuffle_instances(view2_eval)
+        view2_test = shuffle_instances(view2_test)
+
+
+def shuffle_instances(instances_set):
+    images = instances_set[0]
+    labels = instances_set[1]
+
+    shuffled_images = np.zeros(images.shape)
+    for i in range(shuffled_images.shape[0]):
+        shuffled_images[i] = images[np.random.choice(np.where(labels == labels[i])[0])]
+
+    return (shuffled_images, labels)
+
+def box_augment(image, num_boxes, max_width):
+    mask = np.zeros_like(image)
+    
+    for i in range(num_boxes):
+        #Make white box
+        widthx, widthy = np.random.randint(3,max_width, size=2)
+        box = np.array([1]*widthx*widthy).reshape(widthx,widthy)
+        # Sample center and width
+        x, y = np.random.randint(0,28-widthx), np.random.randint(0,28-widthy)
+        mask[x:x+widthx, y:y+widthy] = box
+        
+    augm_image = image + mask
+    augm_image[augm_image>1] = 1
+    
+    return augm_image
+
+def augment_batch(view, num_boxes, max_width):
+    images = view[0].reshape((-1,28,28))
+    augm_images = np.zeros_like(images)
+    for i in range(images.shape[0]):
+        augm_images[i,:] = box_augment(images[i,:], num_boxes=num_boxes, max_width=max_width)
+    augm_images = augm_images.reshape(-1,28*28)
+    
+    return (augm_images, view[1])
+
+def filter_classes(view, classes):
+    images, labels = view
+    ids = np.zeros_like(labels, dtype=bool)
+    for cl in classes:
+        ids = np.logical_or(ids, labels == cl)
+
+    return (images[ids], labels[ids])
+
+def preprocess_dataset(ds):
+    images_train = np.zeros((60000, 28, 28, 1), dtype=np.uint8)
+    labels_train = np.zeros((60000,), dtype=np.uint8)
+    for i, example in enumerate(ds['train']):
+        images_train[i] = example['image']
+        labels_train[i] = example['label']
+
+    images_test = np.zeros((10000, 28, 28, 1), dtype=np.uint8)
+    labels_test = np.zeros((10000,), dtype=np.uint8)
+    for i, example in enumerate(ds['test']):
+        images_test[i] = example['image']
+        labels_test[i] = example['label']
+
+    images_eval = images_train[50000:]/255
+    images_eval = images_eval.reshape((10000, -1))
+    labels_eval = labels_train[50000:]
+
+    images_train = images_train[:50000]/255
+    images_train = images_train.reshape((50000, -1))
+    labels_train = labels_train[:50000]
+
+    images_test = images_test/255
+    images_test = images_test.reshape((10000, -1))
+
+    return (images_train, labels_train), (images_eval, labels_eval), (images_test, labels_test)
