@@ -44,4 +44,4 @@ It can help to evaluate performance of the model.
 ## Evaluation of proposed model
 Shown by the visualation techniques.
 <img src="/Images/c2b-157.jpg" width="1000">
-It shows that when it runs too many epochs which is more possibly overfitting it could not find the correlation by the semantical pixels.
+It shows that when it runs too many epochs which is more possibly overfitting it could not find the correlation by the semantic pixels.
